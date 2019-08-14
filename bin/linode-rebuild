@@ -1,0 +1,83 @@
+#!/bin/bash
+
+source "$(dirname "${BASH_SOURCE[0]}")/utilities.sh"
+
+if [ "$1" == "" ]; then
+  echo "You must provide the name of a linode you wish to rebuild"
+  exit 1
+fi
+
+LABEL=$1
+SERVER_HOSTNAME=$LABEL
+DISTRIBUTION="Ubuntu 18.04 LTS"
+STACKSCRIPT_NAME="initial_setup_docker"
+
+IMAGE_ID=`image_id_from_distribution $DISTRIBUTION`
+IP_ADDRESS=`ip_address_from_label $LABEL`
+
+STACKSCRIPT_ID=`stackscript_id_from_name $STACKSCRIPT_NAME`
+
+ROOT_PASSWORD=`generate_password`
+USER_PASSWORD=`generate_password`
+
+set_hostname $SERVER_HOSTNAME
+set_password $USER_PASSWORD
+JSON_MIN=`config_json_min`
+
+cat <<EOF
+Running $STACKSCRIPT_NAME (id: $STACKSCRIPT_ID) on $LABEL ($IP_ADDRESS)
+
+UDF settings:
+$(config_json)
+
+Parameters:
+  --image "$IMAGE_ID"
+  --root_pass "$ROOT_PASSWORD"
+  --stackscript_id "$STACKSCRIPT_ID"
+  --stackscript_data $JSON_MIN
+
+EOF
+
+RESULT_JSON=`echo "{}" | $JQ_BIN "setpath([\"root_password\"]; \"$ROOT_PASSWORD\")"`
+RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"user_password\"]; \"$USER_PASSWORD\")"`
+RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"image_id\"]; \"$IMAGE_ID\")"`
+RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"stackscript\"]; \"$STACKSCRIPT_NAME\")"`
+RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"stackscript_data\"]; $(config_json_min))"`
+
+if [ -z ${DRY_RUN+x} ]; then
+  LINODE_ID=`linode_id_from_label $LABEL`
+  $LINODE_BIN linodes rebuild $LINODE_ID\
+    --image "$IMAGE_ID" \
+    --root_pass "$ROOT_PASSWORD" \
+    --stackscript_id "$STACKSCRIPT_ID" \
+    --stackscript_data $JSON_MIN
+
+  KNOWN_HOSTS=`grep -v $IP_ADDRESS ~/.ssh/known_hosts`
+  echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+  cat <<EOF
+Once the rebuild is complete, you can login like so:
+
+ssh `config_json | $JQ_BIN -r .username`@$IP_ADDRESS
+
+------------------------------
+Root password: $ROOT_PASSWORD
+User password: $USER_PASSWORD
+------------------------------
+
+EOF
+fi
+
+if [ -d "$SUMMARY_PATH" ]; then
+  RESULT_FILE=$SUMMARY_PATH/$LABEL.json
+  echo $RESULT_JSON | jq . > $RESULT_FILE
+  echo "Deploy parameters (including passwords) written to $RESULT_FILE"
+else
+  cat <<EOF
+Summary file not written because path not found ($SUMMARY_PATH)
+
+Summary:
+
+$RESULT_JSON
+EOF
+fi
