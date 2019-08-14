@@ -33,6 +33,14 @@ EOF
   exit 1
 fi
 
+function image_list() {
+  $LINODE_BIN images list --json \
+  | $JQ_BIN -c 'map(.label)' \
+  | sed 's/[][]//g' \
+  | sed 's/,/\n/g' \
+  | column
+}
+
 function get_image_from_distribution() {
   distribution="$@"
   if [ -z ${IMAGE_JSON+x} ]; then
@@ -67,7 +75,7 @@ function ip_address_from_label() {
 function get_stackscript_from_name() {
   name=$1
   if [ -z ${STACKSCRIPT_JSON+x} ]; then
-    STACKSCRIPT_JSON="`$LINODE_BIN stackscripts list --is_public=false --label=linode_initial_setup --json | $JQ_BIN .[0]`" 
+    STACKSCRIPT_JSON="`$LINODE_BIN stackscripts list --is_public=false --label=$name --json | $JQ_BIN .[0]`"
   fi
   echo $STACKSCRIPT_JSON
 }

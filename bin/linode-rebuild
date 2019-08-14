@@ -3,14 +3,27 @@
 source "$(dirname "${BASH_SOURCE[0]}")/utilities.sh"
 
 if [ "$1" == "" ]; then
-  echo "You must provide the name of a linode you wish to rebuild"
+  echo "ERROR! You must provide the name of a linode you wish to rebuild"
   exit 1
 fi
 
 LABEL=$1
 SERVER_HOSTNAME=$LABEL
-DISTRIBUTION="Ubuntu 18.04 LTS"
-STACKSCRIPT_NAME="initial_setup_docker"
+
+if [ -z ${STACKSCRIPT_NAME+x} ]; then
+  echo "ERROR! STACKSCRIPT_NAME not populated (add to .env or prepend command)"
+  exit 1
+fi
+
+if [ -z ${IMAGE_LABEL+x} ]; then
+  cat <<EOF
+ERROR! IMAGE_LABEL not populated (add to .env or prepend command)
+
+Available values for this are:
+$(image_list)
+EOF
+  exit 1
+fi
 
 IMAGE_ID=`image_id_from_distribution $DISTRIBUTION`
 IP_ADDRESS=`ip_address_from_label $LABEL`
@@ -46,11 +59,11 @@ RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"stackscript_data\"]; $(conf
 
 if [ -z ${DRY_RUN+x} ]; then
   LINODE_ID=`linode_id_from_label $LABEL`
-  $LINODE_BIN linodes rebuild $LINODE_ID\
-    --image "$IMAGE_ID" \
-    --root_pass "$ROOT_PASSWORD" \
-    --stackscript_id "$STACKSCRIPT_ID" \
-    --stackscript_data $JSON_MIN
+  $LINODE_BIN linodes rebuild $LINODE_ID \
+    --image "$IMAGE_ID"                  \
+    --stackscript_id $STACKSCRIPT_ID     \
+    --stackscript_data $JSON_MIN         \
+    --root_pass $ROOT_PASSWORD
 
   KNOWN_HOSTS=`grep -v $IP_ADDRESS ~/.ssh/known_hosts`
   echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
