@@ -41,17 +41,17 @@ function image_list() {
   | column
 }
 
-function get_image_from_distribution() {
-  distribution="$@"
+function get_image_from_label() {
+  label="$@"
   if [ -z ${IMAGE_JSON+x} ]; then
-    IMAGE_JSON="`$LINODE_BIN images list --label="$distribution" --json | $JQ_BIN .[0]`"
+    IMAGE_JSON="`$LINODE_BIN images list --label="$label" --json | $JQ_BIN .[0]`"
   fi
   echo $IMAGE_JSON
 }
 
-function image_id_from_distribution() {
-  distribution="$@"
-  echo "`get_image_from_distribution "$distribution" | $JQ_BIN -r .id`"
+function image_id_from_label() {
+  label="$@"
+  echo "`get_image_from_label "$label" | $JQ_BIN -r .id`"
 }
 
 function get_linode_from_label() {

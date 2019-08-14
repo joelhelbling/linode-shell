@@ -25,7 +25,7 @@ EOF
   exit 1
 fi
 
-IMAGE_ID=`image_id_from_distribution $DISTRIBUTION`
+IMAGE_ID=`image_id_from_label $IMAGE_LABEL`
 IP_ADDRESS=`ip_address_from_label $LABEL`
 
 STACKSCRIPT_ID=`stackscript_id_from_name $STACKSCRIPT_NAME`
