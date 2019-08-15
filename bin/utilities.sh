@@ -24,15 +24,6 @@ if [ "$LINODE_BIN" == "" ]; then
 fi
 LINODE_BIN="$LINODE_BIN --suppress-warnings"
 
-UDF_JSON=./config/udf.json
-if [ ! -f "$UDF_JSON" ]; then
-  cat <<EOF
-You need to create a json file at $UDF_JSON
-You can begin by making a copy of config/udf.example.json
-EOF
-  exit 1
-fi
-
 function image_list() {
   $LINODE_BIN images list --json \
   | $JQ_BIN -c 'map(.label)' \
@@ -89,11 +80,18 @@ function generate_password() {
   echo "`openssl rand -base64 32 | tr -dc a-zA-Z0-9`"
 }
 
+function deploy_parameters() {
+  if [ -z ${DEPLOY_PARAMS} ]; then
+    DEPLOY_PARAMS="`$DEPLOYMENTS_BIN $PATTERN`"
+  fi
+  echo $DEPLOY_PARAMS
+}
+
 function config_json() {
   if [ -z ${CONFIG_JSON+x} ]; then
-    CONFIG_JSON="`$JQ_BIN . $UDF_JSON`"
+    CONFIG_JSON="`deploy_parameters | $JQ_BIN '{gist_id,github_user,server_hostname,timezone,username}'`"
   fi
-  echo $CONFIG_JSON | jq .
+  echo $CONFIG_JSON | $JQ_BIN .
 }
 
 function set_hostname() {
@@ -108,4 +106,23 @@ function set_password() {
 
 function config_json_min() {
   echo `config_json | $JQ_BIN -c .`
+}
+
+function result_json() {
+  if [ -z ${RESULT_JSON+x} ]; then
+    RESULT_JSON="{}"
+  fi
+  echo "`echo $RESULT_JSON | $JQ_BIN .`"
+}
+
+function set_result_json() {
+  key=$1
+  value=$2
+  RESULT_JSON=`result_json | $JQ_BIN "setpath([\"$key\"]; \"$value\")"`
+}
+
+function set_result_json_bare() {
+  key=$1
+  value=$2
+  RESULT_JSON=`result_json | $JQ_BIN "setpath([\"$key\"]; $value)"`
 }

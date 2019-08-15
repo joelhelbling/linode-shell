@@ -7,17 +7,18 @@ if [ "$1" == "" ]; then
   exit 1
 fi
 
-LABEL=$1
-SERVER_HOSTNAME=$LABEL
+PATTERN=$1
 
+STACKSCRIPT_NAME="`deploy_parameters | jq -r .stackscript`"
 if [ -z ${STACKSCRIPT_NAME+x} ]; then
-  echo "ERROR! STACKSCRIPT_NAME not populated (add to .env or prepend command)"
+  echo "ERROR! STACKSCRIPT_NAME not provided with deploy parameters"
   exit 1
 fi
 
+IMAGE_LABEL="`deploy_parameters | jq -r .image`"
 if [ -z ${IMAGE_LABEL+x} ]; then
   cat <<EOF
-ERROR! IMAGE_LABEL not populated (add to .env or prepend command)
+ERROR! IMAGE_LABEL not provided with deploy parameters
 
 Available values for this are:
 $(image_list)
@@ -26,14 +27,14 @@ EOF
 fi
 
 IMAGE_ID=`image_id_from_label $IMAGE_LABEL`
-IP_ADDRESS=`ip_address_from_label $LABEL`
+LABEL="`config_json | jq -r .server_hostname`"
+IP_ADDRESS="`ip_address_from_label $LABEL`"
 
 STACKSCRIPT_ID=`stackscript_id_from_name $STACKSCRIPT_NAME`
 
 ROOT_PASSWORD=`generate_password`
 USER_PASSWORD=`generate_password`
 
-set_hostname $SERVER_HOSTNAME
 set_password $USER_PASSWORD
 JSON_MIN=`config_json_min`
 
@@ -51,11 +52,14 @@ Parameters:
 
 EOF
 
-RESULT_JSON=`echo "{}" | $JQ_BIN "setpath([\"root_password\"]; \"$ROOT_PASSWORD\")"`
-RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"user_password\"]; \"$USER_PASSWORD\")"`
-RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"image_id\"]; \"$IMAGE_ID\")"`
-RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"stackscript\"]; \"$STACKSCRIPT_NAME\")"`
-RESULT_JSON=`echo $RESULT_JSON | $JQ_BIN "setpath([\"stackscript_data\"]; $(config_json_min))"`
+set_result_json root_password $ROOT_PASSWORD
+set_result_json user_password $USER_PASSWORD
+set_result_json image_id $IMAGE_ID
+set_result_json stackscript $STACKSCRIPT_NAME
+set_result_json stackscript_id $STACKSCRIPT_ID
+set_result_json ip_address $IP_ADDRESS
+set_result_json_bare stackscript_data `config_json_min`
+# result_json
 
 if [ -z ${DRY_RUN+x} ]; then
   LINODE_ID=`linode_id_from_label $LABEL`
@@ -65,13 +69,22 @@ if [ -z ${DRY_RUN+x} ]; then
     --stackscript_data $JSON_MIN         \
     --root_pass $ROOT_PASSWORD
 
-  KNOWN_HOSTS=`grep -v $IP_ADDRESS ~/.ssh/known_hosts`
-  echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+  ssh-keygen -R "$IP_ADDRESS"
+fi
 
+if [ ! -z ${DRY_RUN+x} ]; then
   cat <<EOF
-Once the rebuild is complete, you can login like so:
+Summary:
 
-ssh `config_json | $JQ_BIN -r .username`@$IP_ADDRESS
+$(result_json)
+EOF
+else
+  if [ -d "$SUMMARY_PATH" ]; then
+    RESULT_FILE=$SUMMARY_PATH/$LABEL.json
+    result_json | jq . > $RESULT_FILE
+
+    cat <<EOF
+Deploy parameters (including passwords) written to $RESULT_FILE
 
 ------------------------------
 Root password: $ROOT_PASSWORD
@@ -79,18 +92,20 @@ User password: $USER_PASSWORD
 ------------------------------
 
 EOF
-fi
-
-if [ -d "$SUMMARY_PATH" ]; then
-  RESULT_FILE=$SUMMARY_PATH/$LABEL.json
-  echo $RESULT_JSON | jq . > $RESULT_FILE
-  echo "Deploy parameters (including passwords) written to $RESULT_FILE"
-else
-  cat <<EOF
+  else
+    cat <<EOF
 Summary file not written because path not found ($SUMMARY_PATH)
 
 Summary:
 
-$RESULT_JSON
+$(result_json)
+EOF
+  fi
+
+  cat <<EOF
+Once the rebuild is complete, you can login like so:
+
+ssh `config_json | $JQ_BIN -r .username`@$IP_ADDRESS
+
 EOF
 fi
