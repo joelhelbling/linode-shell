@@ -26,6 +26,7 @@ EOF
   exit 1
 fi
 
+DEPLOYED_AT=`date --iso-8601=seconds`
 IMAGE_ID=`image_id_from_label $IMAGE_LABEL`
 LABEL="`config_json | jq -r .server_hostname`"
 IP_ADDRESS="`ip_address_from_label $LABEL`"
@@ -54,6 +55,7 @@ EOF
 
 set_result_json root_password $ROOT_PASSWORD
 set_result_json user_password $USER_PASSWORD
+set_result_json deployed_at $DEPLOYED_AT
 set_result_json image_id $IMAGE_ID
 set_result_json stackscript $STACKSCRIPT_NAME
 set_result_json stackscript_id $STACKSCRIPT_ID
